@@ -104,6 +104,67 @@ Given a specific time, let's say you want to predict the temperature 6 hours in 
 The function below returns the above described windows of time for the model to train on. The parameter `history_size` is the size of the past window of information. The `target_size` is how far in the future does the model need to learn to predict. The `target_size` is the label that needs to be predicted.
 <!-- #endregion -->
 
+<!-- #region colab_type="text" id="qoFJZmXBaxCc" -->
+In both the following tutorials, the first 300,000 rows of the data will be the training dataset, and there remaining will be the validation dataset. This amounts to ~2100 days worth of training data.
+<!-- #endregion -->
+
+```{python colab={}, colab_type="code", id="ia-MPAHxbInX"}
+TRAIN_SPLIT = 300000
+EPOCHS = 10
+EVALUATION_INTERVAL = 200
+```
+
+<!-- #region colab_type="text" id="EowWDtaNnH1y" -->
+Setting seed to ensure reproducibility.
+<!-- #endregion -->
+
+```{python colab={}, colab_type="code", id="-x-GgENynHdx"}
+tf.random.set_seed(13)
+```
+
+```{python}
+def index_from_generator(partial_gen, index):
+    c = 0
+    for x in partial_gen():
+         if index == c:
+                return x
+         c = c + 1
+```
+
+```{python colab={}, colab_type="code", id="qVukM9dRipop"}
+def create_time_steps(length):
+  return list(range(-length, 0))
+```
+
+```{python colab={}, colab_type="code", id="QQeGvh7cWXMR"}
+def show_plot(plot_data, delta, title):
+  labels = ['History', 'True Future', 'Model Prediction']
+  marker = ['.-', 'rx', 'go']
+  time_steps = create_time_steps(plot_data[0].shape[0])
+  if delta:
+    future = delta
+  else:
+    future = 0
+
+  plt.title(title)
+  for i, x in enumerate(plot_data):
+    if i:
+      plt.plot(future, plot_data[i], marker[i], markersize=10,
+               label=labels[i])
+    else:
+      plt.plot(time_steps, plot_data[i].flatten(), marker[i], label=labels[i])
+  plt.legend()
+  plt.xlim([time_steps[0], (future+5)*2])
+  plt.xlabel('Time-Step')
+  return plt
+```
+
+```{python}
+
+```
+
+## Univariate
+
 ```{python colab={}, colab_type="code", id="7AoxQuTrWIbi"}
 def univariate_data(dataset, start_index, end_index, history_size, target_size):
   data = []
@@ -122,6 +183,26 @@ def univariate_data(dataset, start_index, end_index, history_size, target_size):
 ```
 
 ```{python}
+train_x, train_y = univariate_data(uni_data, 0, TRAIN_SPLIT,
+                    univariate_past_history, univariate_future_target)
+
+val_x, val_y = univariate_data(uni_data, TRAIN_SPLIT, None,
+                    univariate_past_history, univariate_future_target)
+```
+
+```{python}
+train_x.shape
+```
+
+```{python}
+val_x.shape
+```
+
+```{python}
+
+```
+
+```{python}
 def univariate_data_gen(dataset, start_index, end_index, history_size, target_size):
   data = []
   labels = []
@@ -135,22 +216,6 @@ def univariate_data_gen(dataset, start_index, end_index, history_size, target_si
     # Reshape data from (history_size,) to (history_size, 1)
     yield np.reshape(dataset[indices], (history_size, 1)), \
         dataset[i+target_size]
-```
-
-<!-- #region colab_type="text" id="qoFJZmXBaxCc" -->
-In both the following tutorials, the first 300,000 rows of the data will be the training dataset, and there remaining will be the validation dataset. This amounts to ~2100 days worth of training data.
-<!-- #endregion -->
-
-```{python colab={}, colab_type="code", id="ia-MPAHxbInX"}
-TRAIN_SPLIT = 300000
-```
-
-<!-- #region colab_type="text" id="EowWDtaNnH1y" -->
-Setting seed to ensure reproducibility.
-<!-- #endregion -->
-
-```{python colab={}, colab_type="code", id="-x-GgENynHdx"}
-tf.random.set_seed(13)
 ```
 
 <!-- #region colab_type="text" id="8YEwr-NoWUpV" -->
@@ -219,15 +284,6 @@ val_gen = partial(univariate_data_gen, uni_data, TRAIN_SPLIT, None,
 ```
 
 ```{python}
-def index_from_generator(partial_gen, index):
-    c = 0
-    for x in partial_gen():
-         if index == c:
-                return x
-         c = c + 1
-```
-
-```{python}
 x_train_first, y_train_first = index_from_generator(train_gen, 0)
 ```
 
@@ -247,34 +303,6 @@ print (y_train_first.shape)
 <!-- #region colab_type="text" id="hni3Jt9OMR1_" -->
 Now that the data has been created, let's take a look at a single example. The information given to the network is given in blue, and it must predict the value at the red cross.
 <!-- #endregion -->
-
-```{python colab={}, colab_type="code", id="qVukM9dRipop"}
-def create_time_steps(length):
-  return list(range(-length, 0))
-```
-
-```{python colab={}, colab_type="code", id="QQeGvh7cWXMR"}
-def show_plot(plot_data, delta, title):
-  labels = ['History', 'True Future', 'Model Prediction']
-  marker = ['.-', 'rx', 'go']
-  time_steps = create_time_steps(plot_data[0].shape[0])
-  if delta:
-    future = delta
-  else:
-    future = 0
-
-  plt.title(title)
-  for i, x in enumerate(plot_data):
-    if i:
-      plt.plot(future, plot_data[i], marker[i], markersize=10,
-               label=labels[i])
-    else:
-      plt.plot(time_steps, plot_data[i].flatten(), marker[i], label=labels[i])
-  plt.legend()
-  plt.xlim([time_steps[0], (future+5)*2])
-  plt.xlabel('Time-Step')
-  return plt
-```
 
 ```{python colab={}, colab_type="code", id="Pd05iV-UWXKL"}
 show_plot([x_train_first, y_train_first], 0, 'Sample Example')
@@ -371,8 +399,6 @@ Let's train the model now. Due to the large size of the dataset, in the interest
 <!-- #endregion -->
 
 ```{python colab={}, colab_type="code", id="0opH9xi5MtIk"}
-EVALUATION_INTERVAL = 200
-EPOCHS = 10
 
 simple_lstm_model.fit(train_univariate, epochs=EPOCHS,
                       steps_per_epoch=EVALUATION_INTERVAL,
@@ -466,10 +492,6 @@ def multivariate_data(dataset, target, start_index, end_index, history_size,
   return np.array(data), np.array(labels)
 ```
 
-<!-- #region colab_type="text" id="HWVGYwbN2ITI" -->
-In this tutorial, the network is shown data from the last five (5) days, i.e. 720 observations that are sampled every hour. The sampling is done every one hour since a drastic change is not expected within 60 minutes. Thus, 120 observation represent history of the last five days.  For the single step prediction model, the label for a datapoint is the temperature 12 hours into the future. In order to create a label for this, the temperature after 72(12*6) observations is used.
-<!-- #endregion -->
-
 ```{python colab={}, colab_type="code", id="HlhVGzPhmMYI"}
 past_history = 720
 future_target = 72
@@ -478,11 +500,62 @@ STEP = 6
 x_train_single, y_train_single = multivariate_data(dataset, dataset[:, 1], 0,
                                                    TRAIN_SPLIT, past_history,
                                                    future_target, STEP,
-                                                   single_step=True)
+                                                   single_step=False)
 x_val_single, y_val_single = multivariate_data(dataset, dataset[:, 1],
                                                TRAIN_SPLIT, None, past_history,
                                                future_target, STEP,
-                                               single_step=True)
+                                               single_step=False)
+```
+
+```{python}
+x_train_single.shape
+```
+
+```{python}
+x_val_single.shape
+```
+
+## Use generators to save up some memory
+
+```{python}
+def multivariate_data_gen(dataset, target, start_index, end_index, history_size,
+                      target_size, step, single_step=False):
+  data = []
+  labels = []
+
+  start_index = start_index + history_size
+  if end_index is None:
+    end_index = len(dataset) - target_size
+
+  for i in range(start_index, end_index):
+    indices = range(i-history_size, i, step)
+    
+    if single_step:
+        yield dataset[indices], target[i+target_size]
+    else:
+        yield dataset[indices], target[i:i+target_size]
+```
+
+<!-- #region colab_type="text" id="HWVGYwbN2ITI" -->
+In this tutorial, the network is shown data from the last five (5) days, i.e. 720 observations that are sampled every hour. The sampling is done every one hour since a drastic change is not expected within 60 minutes. Thus, 120 observation represent history of the last five days.  For the single step prediction model, the label for a datapoint is the temperature 12 hours into the future. In order to create a label for this, the temperature after 72(12*6) observations is used.
+<!-- #endregion -->
+
+```{python}
+from functools import partial
+
+```
+
+```{python}
+past_history = 720
+future_target = 72
+STEP = 6
+
+train_gen = partial(multivariate_data_gen, dataset, dataset[:, 1], 0,
+                        TRAIN_SPLIT, past_history, future_target, STEP, single_step=True)
+
+val_gen = partial(multivariate_data_gen, dataset, dataset[:, 1],
+                        TRAIN_SPLIT, None, past_history,
+                    future_target, STEP, single_step=True)
 ```
 
 <!-- #region colab_type="text" id="CamMObrwPhnp" -->
@@ -491,21 +564,70 @@ Let's look at a single data-point.
 <!-- #endregion -->
 
 ```{python colab={}, colab_type="code", id="_tVKm-ZIPls0"}
-print ('Single window of past history : {}'.format(x_train_single[0].shape))
+x_train_first, y_train_first = index_from_generator(train_gen, 0)
+print ('Single window of past history : {}'.format(x_train_first.shape))
+print ('Single window of past history : {}'.format(y_train_first.shape))
 ```
 
-```{python colab={}, colab_type="code", id="eCWG4xgQ3O6E"}
+```{python}
+BATCH_SIZE = 256
+BUFFER_SIZE = 10000
+```
+
+<!-- #region colab={} colab_type="code" id="eCWG4xgQ3O6E" -->
 train_data_single = tf.data.Dataset.from_tensor_slices((x_train_single, y_train_single))
+train_data_single
+<!-- #endregion -->
+
+```{python}
+train_data_single = tf.data.Dataset.from_generator(train_gen, 
+                (tf.float64, tf.float64), 
+                        output_shapes=(x_train_first.shape,()))
+train_data_single
+```
+
+```{python}
 train_data_single = train_data_single.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
+train_data_single
+```
+
+```{python}
+
+```
 
 val_data_single = tf.data.Dataset.from_tensor_slices((x_val_single, y_val_single))
+val_data_single
+
+
 val_data_single = val_data_single.batch(BATCH_SIZE).repeat()
+val_data_single
+
+```{python}
+x_val_first, y_val_first = index_from_generator(val_gen, 0)
+print ('Single window of past history : {}'.format(x_val_first.shape))
+print ('Single window of past history : {}'.format(y_val_first.shape))
+```
+
+```{python}
+val_data_single = tf.data.Dataset.from_generator(val_gen, 
+                (tf.float64, tf.float64), 
+                        output_shapes=(x_train_first.shape,()))
+val_data_single
+```
+
+```{python}
+val_data_single = val_data_single.batch(BATCH_SIZE).repeat()
+val_data_single
+```
+
+```{python}
+
 ```
 
 ```{python colab={}, colab_type="code", id="0aWec9_nlxBl"}
 single_step_model = tf.keras.models.Sequential()
 single_step_model.add(tf.keras.layers.LSTM(32,
-                                           input_shape=x_train_single.shape[-2:]))
+                                           input_shape=x_train_first.shape))
 single_step_model.add(tf.keras.layers.Dense(1))
 
 single_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='mae')
