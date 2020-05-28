@@ -121,6 +121,22 @@ def univariate_data(dataset, start_index, end_index, history_size, target_size):
   return np.array(data), np.array(labels)
 ```
 
+```{python}
+def univariate_data_gen(dataset, start_index, end_index, history_size, target_size):
+  data = []
+  labels = []
+
+  start_index = start_index + history_size
+  if end_index is None:
+    end_index = len(dataset) - target_size
+
+  for i in range(start_index, end_index):
+    indices = range(i-history_size, i)
+    # Reshape data from (history_size,) to (history_size, 1)
+    yield np.reshape(dataset[indices], (history_size, 1)), \
+        dataset[i+target_size]
+```
+
 <!-- #region colab_type="text" id="qoFJZmXBaxCc" -->
 In both the following tutorials, the first 300,000 rows of the data will be the training dataset, and there remaining will be the validation dataset. This amounts to ~2100 days worth of training data.
 <!-- #endregion -->
@@ -187,16 +203,32 @@ uni_data = (uni_data-uni_train_mean)/uni_train_std
 Let's now create the data for the univariate model. For part 1, the model will be given the last 20 recorded temperature observations, and needs to learn to predict the temperature at the next time step. 
 <!-- #endregion -->
 
-```{python colab={}, colab_type="code", id="aJJ-T49vWXOZ"}
+```{python}
+from functools import partial
+
 univariate_past_history = 20
 univariate_future_target = 0
 
-x_train_uni, y_train_uni = univariate_data(uni_data, 0, TRAIN_SPLIT,
+train_gen = partial(univariate_data_gen, uni_data, 0, TRAIN_SPLIT,
                                            univariate_past_history,
                                            univariate_future_target)
-x_val_uni, y_val_uni = univariate_data(uni_data, TRAIN_SPLIT, None,
+
+val_gen = partial(univariate_data_gen, uni_data, TRAIN_SPLIT, None,
                                        univariate_past_history,
                                        univariate_future_target)
+```
+
+```{python}
+def index_from_generator(partial_gen, index):
+    c = 0
+    for x in partial_gen():
+         if index == c:
+                return x
+         c = c + 1
+```
+
+```{python}
+x_train_first, y_train_first = index_from_generator(train_gen, 0)
 ```
 
 <!-- #region colab_type="text" id="aWpVMENsdp0N" -->
@@ -205,9 +237,11 @@ This is what the `univariate_data` function returns.
 
 ```{python colab={}, colab_type="code", id="feDd95XFdz5H"}
 print ('Single window of past history')
-print (x_train_uni[0])
+print (x_train_first)
+print (x_train_first.shape)
 print ('\n Target temperature to predict')
-print (y_train_uni[0])
+print (y_train_first)
+print (y_train_first.shape)
 ```
 
 <!-- #region colab_type="text" id="hni3Jt9OMR1_" -->
@@ -243,7 +277,7 @@ def show_plot(plot_data, delta, title):
 ```
 
 ```{python colab={}, colab_type="code", id="Pd05iV-UWXKL"}
-show_plot([x_train_uni[0], y_train_uni[0]], 0, 'Sample Example')
+show_plot([x_train_first, y_train_first], 0, 'Sample Example')
 ```
 
 <!-- #region colab_type="text" id="b5rUJ_2YMWzG" -->
@@ -257,7 +291,7 @@ def baseline(history):
 ```
 
 ```{python colab={}, colab_type="code", id="KMcdFYKQMWlm"}
-show_plot([x_train_uni[0], y_train_uni[0], baseline(x_train_uni[0])], 0,
+show_plot([x_train_first, y_train_first, baseline(x_train_first)], 0,
            'Baseline Prediction Example')
 ```
 
@@ -273,15 +307,35 @@ A Recurrent Neural Network (RNN) is a type of neural network well-suited to time
 Let's now use `tf.data` to shuffle, batch, and cache the dataset.
 <!-- #endregion -->
 
-```{python colab={}, colab_type="code", id="kk-evkrmMWh9"}
+```{python}
+(univariate_past_history, 1)
+```
+
+```{python}
 BATCH_SIZE = 256
 BUFFER_SIZE = 10000
 
-train_univariate = tf.data.Dataset.from_tensor_slices((x_train_uni, y_train_uni))
-train_univariate = train_univariate.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
+train_univariate = tf.data.Dataset.from_generator(train_gen, 
+                (tf.float64, tf.float64), 
+                        output_shapes=((univariate_past_history, 1),()))
+train_univariate
+```
 
-val_univariate = tf.data.Dataset.from_tensor_slices((x_val_uni, y_val_uni))
+```{python}
+train_univariate = train_univariate.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
+train_univariate
+```
+
+```{python}
+val_univariate = tf.data.Dataset.from_generator(val_gen, 
+                (tf.float64, tf.float64), 
+                        output_shapes=((univariate_past_history, 1),()))
+val_univariate
+```
+
+```{python}
 val_univariate = val_univariate.batch(BATCH_SIZE).repeat()
+val_univariate
 ```
 
 <!-- #region colab_type="text" id="n2AmKkyVS5Ht" -->
@@ -296,7 +350,7 @@ You will see the LSTM requires the input shape of the data it is being given.
 
 ```{python colab={}, colab_type="code", id="IDbpHosCMWZO"}
 simple_lstm_model = tf.keras.models.Sequential([
-    tf.keras.layers.LSTM(8, input_shape=x_train_uni.shape[-2:]),
+    tf.keras.layers.LSTM(8, input_shape=(univariate_past_history,1)),
     tf.keras.layers.Dense(1)
 ])
 
@@ -308,7 +362,7 @@ Let's make a sample prediction, to check the output of the model.
 <!-- #endregion -->
 
 ```{python colab={}, colab_type="code", id="2mPZbIKCMtLR"}
-for x, y in val_univariate.take(1):
+for x, y in train_univariate.take(1):
     print(simple_lstm_model.predict(x).shape)
 ```
 
